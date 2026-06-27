@@ -1,0 +1,53 @@
+{
+  "name": "phishing-screenshot-collector",
+  "version": "1.0.0",
+  "description": "Enterprise-grade Playwright screenshot collection pipeline for MobileCLIP phishing detection",
+  "main": "dist/scripts/collect.js",
+  "scripts": {
+    "build": "tsc",
+    "collect": "ts-node src/scripts/collect.ts",
+    "resume": "ts-node src/scripts/resume.ts",
+    "validate": "ts-node src/scripts/validate.ts",
+    "deduplicate": "ts-node src/scripts/deduplicate.ts",
+    "split": "ts-node src/scripts/splitDataset.ts",
+    "report": "ts-node src/scripts/generateReport.ts",
+    "validate-csv": "ts-node src/scripts/validateCsv.ts",
+    "install-browsers": "npx playwright install chromium",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "test": "jest --passWithNoTests",
+    "postinstall": "npx playwright install chromium --with-deps"
+  },
+  "dependencies": {
+    "playwright": "^1.44.0",
+    "csv-parse": "^5.5.6",
+    "csv-writer": "^1.6.0",
+    "winston": "^3.13.0",
+    "sharp": "^0.33.4",
+    "cli-progress": "^3.12.0",
+    "dotenv": "^16.4.5",
+    "zod": "^3.23.8",
+    "chalk": "^4.1.2",
+    "cheerio": "^1.0.0",
+    "dayjs": "^1.11.11",
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "ts-node": "^10.9.2",
+    "@types/node": "^20.12.12",
+    "@types/cli-progress": "^3.11.5",
+    "@types/node-fetch": "^2.6.11",
+    "@types/cheerio": "^0.22.35",
+    "eslint": "^8.57.0",
+    "@typescript-eslint/eslint-plugin": "^7.10.0",
+    "@typescript-eslint/parser": "^7.10.0",
+    "prettier": "^3.3.1",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.12",
+    "ts-jest": "^29.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

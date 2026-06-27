@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  collector:
+    build: .
+    container_name: phishing-collector
+    volumes:
+      - ./url:/app/url:ro
+      - ./dataset:/app/dataset
+      - ./checkpoints:/app/checkpoints
+      - ./logs:/app/logs
+      - ./metadata:/app/metadata
+      - ./reports:/app/reports
+    environment:
+      - WORKERS=6
+      - HEADLESS=true
+      - MAX_URLS=0
+      - CHECKPOINT_INTERVAL=50
+      - MAX_RETRIES=3
+      - PAGE_TIMEOUT_MS=30000
+      - ANTI_DETECTION=true
+    restart: "no"
+    shm_size: "2gb"  # Required for Chromium

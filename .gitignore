@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+dataset/
+checkpoints/
+logs/
+metadata/
+reports/
+*.png
+*.jpg
+*.jpeg
+*.zip
+.DS_Store
+Thumbs.db
