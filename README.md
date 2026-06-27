@@ -490,6 +490,17 @@ npm test
 
 ---
 
+## Dataset
+
+The repository may contain a partially collected dataset for testing.
+
+To generate additional screenshots:
+
+```bash
+npm run collect
+
+--------
+
 ## License
 
 MIT — for academic research and defensive cybersecurity purposes only.

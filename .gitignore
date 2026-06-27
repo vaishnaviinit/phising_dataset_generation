@@ -1,14 +1,19 @@
+# Dependencies
 node_modules/
 dist/
+
+# Environment
 .env
-dataset/
-checkpoints/
-logs/
-metadata/
-reports/
-*.png
-*.jpg
-*.jpeg
-*.zip
+
+# OS
 .DS_Store
 Thumbs.db
+
+# Temporary outputs
+*.zip
+
+# Logs (optional)
+logs/*.log
+
+# Ignore checkpoint only
+checkpoints/progress.json
