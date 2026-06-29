@@ -1,0 +1,18 @@
+url,label,reason,status_code,error_message,timestamp,attempt
+http://www.teck.com,0,captcha,,CAPTCHA detected,2026-06-29T14:08:29.387Z,3
+http://www.hypres.com,0,captcha,,CAPTCHA detected,2026-06-29T14:08:36.446Z,3
+http://www.ite.waw.pl/en/index.php,0,unknown,,Error page: HTTP 404,2026-06-29T14:08:47.134Z,3
+http://www.robosoft.com/en/home/,0,unknown,,Error page: HTTP 404,2026-06-29T14:09:04.239Z,3
+http://www.ecofys.com/en/,0,unknown,,Error page: HTTP 404,2026-06-29T14:09:13.452Z,3
+http://www.btplc.com,0,unknown,,Error page: HTTP 503,2026-06-29T14:09:13.632Z,3
+http://www.wisenmunro.org,0,unknown,,Error page: HTTP 0,2026-06-29T14:09:18.946Z,3
+http://www2.st.com/content/st_com/en.html,0,unknown,,Error page: HTTP 0,2026-06-29T14:09:20.887Z,3
+http://www.offis.de/en/start.html,0,unknown,,Error page: HTTP 404,2026-06-29T14:09:28.741Z,3
+http://www.cpr.it,0,unknown,,Error page: HTTP 0,2026-06-29T14:09:35.892Z,3
+https://www.netflix.com,0,captcha,,CAPTCHA detected,2026-06-29T14:09:37.724Z,3
+https://www.reddit.com,0,captcha,,CAPTCHA detected,2026-06-29T14:09:42.313Z,3
+https://www.adobe.com,0,unknown,,Error page: HTTP 0,2026-06-29T14:09:43.748Z,3
+https://www.oracle.com,0,unknown,,Error page: HTTP 403,2026-06-29T14:09:50.394Z,3
+https://www.spotify.com,0,captcha,,CAPTCHA detected,2026-06-29T14:09:54.349Z,3
+https://www.paypal.com,0,captcha,,CAPTCHA detected,2026-06-29T14:10:02.795Z,3
+https://www.india.gov.in,0,unknown,,Error page: HTTP 403,2026-06-29T14:10:10.269Z,3

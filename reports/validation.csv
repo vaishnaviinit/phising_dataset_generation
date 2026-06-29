@@ -1,19 +1,2 @@
 id,relative_path,label,label_name,brand,page_type,screenshot_type,url
-1e9fb089e63c833d,legitimate/home/homepage/385b0670/desktop.png,0,legitimate,Home,homepage,desktop,http://www.slam.nhs.uk
-e06b75b3600383be,legitimate/home/homepage/385b0670/mobile.png,0,legitimate,Home,homepage,mobile,http://www.slam.nhs.uk
-f79af17c52f30073,legitimate/home/homepage/385b0670/fullpage.png,0,legitimate,Home,homepage,fullpage,http://www.slam.nhs.uk
-f88650332629c27f,legitimate/home/homepage/385b0670/above_fold.png,0,legitimate,Home,homepage,above_fold,http://www.slam.nhs.uk
-317c62fdde8fa409,legitimate/home/homepage/327e12c1/desktop.png,0,legitimate,Home,homepage,desktop,http://www.nri.org
-7da01d8645c27a14,legitimate/home/homepage/327e12c1/mobile.png,0,legitimate,Home,homepage,mobile,http://www.nri.org
-134fcd60cc5806da,legitimate/home/homepage/327e12c1/fullpage.png,0,legitimate,Home,homepage,fullpage,http://www.nri.org
-b9450a8ebb5574b5,legitimate/home/homepage/327e12c1/above_fold.png,0,legitimate,Home,homepage,above_fold,http://www.nri.org
-0e035b2f2ef49a2e,legitimate/homepage/d9940dba/desktop.png,0,legitimate,Національний університет біоресурсів і природокористування України,homepage,desktop,http://nubip.edu.ua
-b837ac84de15d05d,legitimate/homepage/d9940dba/mobile.png,0,legitimate,Національний університет біоресурсів і природокористування України,homepage,mobile,http://nubip.edu.ua
-c729038068e4287c,legitimate/homepage/d9940dba/fullpage.png,0,legitimate,Національний університет біоресурсів і природокористування України,homepage,fullpage,http://nubip.edu.ua
-20c0196ae7e16ca9,legitimate/homepage/d9940dba/above_fold.png,0,legitimate,Національний університет біоресурсів і природокористування України,homepage,above_fold,http://nubip.edu.ua
-6c62164ab137cc9c,legitimate/login/3953c494/desktop.png,0,legitimate,Ужгородський національний університет,login,desktop,https://www.uzhnu.edu.ua/uk/site/login
-ad40a994de80cc7c,legitimate/login/3953c494/fullpage.png,0,legitimate,Ужгородський національний університет,login,fullpage,https://www.uzhnu.edu.ua/uk/site/login
-b84a0950f275642b,legitimate/login/3953c494/above_fold.png,0,legitimate,Ужгородський національний університет,login,above_fold,https://www.uzhnu.edu.ua/uk/site/login
-10352bfd83f27926,legitimate/gov_uk/payment/4a596eba/desktop.png,0,legitimate,GOV.UK,payment,desktop,https://www.bristol.gov.uk/pay-council-bills-fines-and-invoices
-91850747e9fbc8b0,legitimate/gov_uk/payment/4a596eba/fullpage.png,0,legitimate,GOV.UK,payment,fullpage,https://www.bristol.gov.uk/pay-council-bills-fines-and-invoices
-7614cf8468ba3fe0,legitimate/gov_uk/payment/4a596eba/above_fold.png,0,legitimate,GOV.UK,payment,above_fold,https://www.bristol.gov.uk/pay-council-bills-fines-and-invoices
+

@@ -1,11 +1,11 @@
 {
-  "train": 463,
-  "validation": 18,
-  "test": 1412,
-  "trainLegitimate": 463,
+  "train": 1,
+  "validation": 0,
+  "test": 1,
+  "trainLegitimate": 1,
   "trainPhishing": 0,
-  "valLegitimate": 18,
+  "valLegitimate": 0,
   "valPhishing": 0,
-  "testLegitimate": 1412,
+  "testLegitimate": 1,
   "testPhishing": 0
 }
