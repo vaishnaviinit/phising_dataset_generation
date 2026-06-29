@@ -9,10 +9,13 @@ export type PageType =
   | 'signup'
   | 'checkout'
   | 'payment'
+  | 'cart'
   | 'otp'
   | 'dashboard'
   | 'account'
+  | 'profile'
   | 'forgot_password'
+  | 'password_reset'
   | 'settings'
   | 'unknown';
 export type ScreenshotType = 'desktop' | 'mobile' | 'fullpage' | 'above_fold';

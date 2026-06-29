@@ -1,20 +1,49 @@
-import { BrowserContext } from 'playwright';
+// ─────────────────────────────────────────────────────────────────────────────
+//  Screenshot collector — memory-optimised, page-diversity strategy
+//
+//  Memory model (8 GB machine):
+//    • ONE browser process per worker   (BrowserPool — never re-launched)
+//    • ONE BrowserContext per URL       (fresh cookies/storage, clean isolation)
+//    • ONE Page open at any time       (homepage page closed before sub-pages)
+//    • Pages are closed immediately after each screenshot
+//    • Context is closed after all pages for a URL are done → full GC
+//
+//  Per URL the collector:
+//    1. Opens a fresh context, creates one Page → homepage.
+//    2. Captures ONE desktop screenshot → `{brand}/homepage.png`
+//    3. Discovers secondary pages (login, signup, checkout, …).
+//    4. Closes the homepage Page (frees ~30 MB renderer memory).
+//    5. For each discovered page: open Page → navigate → capture → close Page.
+//    6. Closes the context (cookies + cache released).
+//
+//  Duplicate guards (three layers):
+//    • File guard  — file already exists on disk → skip (resume-safe).
+//    • URL guard   — final URL after redirects already visited → skip.
+//    • Hash guard  — dHash Hamming distance ≤ 5 → delete + skip.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import * as fs from 'fs';
+import * as path from 'path';
+import { BrowserContext, Page } from 'playwright';
 import { Config } from '../config';
-import { QueueItem, ProcessResult, FailureReason, DiscoveredPage, PageType } from '../types';
+import { QueueItem, ProcessResult, FailureReason, PageType } from '../types';
 import { BrowserPool } from '../browser/browserPool';
 import { PageNavigator } from '../playwright/pageNavigator';
 import { ScreenshotCapture } from '../playwright/screenshotCapture';
 import { PageDiscovery, identifyPageType } from '../playwright/pageDiscovery';
 import { BrandDetector } from '../brand/brandDetector';
 import { QualityChecker } from '../image/qualityChecker';
+import { hammingDistance } from '../image/duplicateDetector';
 import { MetadataGenerator, GenerateInput } from '../metadata/metadataGenerator';
 import { MetadataStore } from '../metadata/metadataStore';
 import { FileStorage } from '../storage/fileStorage';
 import { CheckpointManager } from './checkpointManager';
 import { RetryManager } from '../retry/retryManager';
 import { ProgressTracker } from '../utils/progress';
-import { shortHash } from '../utils/helpers';
 import { applyStealthToPage } from '../playwright/antiDetection';
+
+/** Maximum Hamming distance to consider two page screenshots as duplicates. */
+const HASH_DISTANCE_THRESHOLD = 5;
 
 export class ScreenshotCollector {
   private config: Config;
@@ -49,13 +78,13 @@ export class ScreenshotCollector {
       config.antiDetection,
     );
 
-    this.capture = new ScreenshotCapture({
-      outputDir: config.outputDir,
-      types: config.screenshotTypes,
-      timeoutMs: config.screenshotTimeoutMs,
-    });
+    this.capture = new ScreenshotCapture(config.screenshotTimeoutMs);
 
-    this.discovery = new PageDiscovery(4);
+    this.discovery = new PageDiscovery(
+      config.pageDiscovery,
+      config.maxSubPagesPerUrl,
+    );
+
     this.brandDetector = new BrandDetector();
     this.qualityChecker = new QualityChecker(config.quality);
     this.metaGenerator = new MetadataGenerator(config.outputDir);
@@ -66,7 +95,8 @@ export class ScreenshotCollector {
     });
   }
 
-  /** Process a single URL item — the unit of work for each worker task. */
+  // ── Public entry point ────────────────────────────────────────────────────
+
   async processItem(
     item: QueueItem,
     workerIndex: number,
@@ -74,7 +104,6 @@ export class ScreenshotCollector {
   ): Promise<ProcessResult> {
     const startMs = Date.now();
 
-    // Skip already processed
     if (this.checkpoint.isProcessed(item.url)) {
       progress.update({ skipped: 1, currentUrl: item.url });
       return { success: true, url: item.url, screenshots: [], durationMs: 0 };
@@ -99,7 +128,6 @@ export class ScreenshotCollector {
       return { ...result, durationMs };
     }
 
-    // Record failure
     const reason = error?.reason ?? 'unknown';
     this.checkpoint.markFailed(item.url);
     this.fileStorage.logFailedUrl({
@@ -122,170 +150,153 @@ export class ScreenshotCollector {
     };
   }
 
+  // ── Core collection logic ─────────────────────────────────────────────────
+
   private async collectScreenshots(
     item: QueueItem,
     workerIndex: number,
   ): Promise<ProcessResult> {
-    const urlHash = shortHash(item.url);
-
-    // Create desktop and mobile contexts
-    let desktopCtx: BrowserContext | null = null;
-    let mobileCtx: BrowserContext | null = null;
+    // ONE context per URL.  All pages for this URL live in this context.
+    // Closing the context at the end releases cookies, cache, and all pages.
+    let ctx: BrowserContext | null = null;
 
     try {
-      desktopCtx = await this.browserPool.createContext(workerIndex, false);
-      mobileCtx = await this.browserPool.createContext(workerIndex, true);
+      ctx = await this.browserPool.createContext(workerIndex, false);
 
-      const desktopPage = await desktopCtx.newPage();
-      const mobilePage = await mobileCtx.newPage();
+      // ── 1. Homepage ───────────────────────────────────────────────────────
+      const nav = await this.navigateFresh(ctx, item.url);
 
-      if (this.config.antiDetection) {
-        await applyStealthToPage(desktopPage);
-        await applyStealthToPage(mobilePage);
-      }
-
-      // Navigate both pages concurrently
-      const [desktopNav] = await Promise.all([
-        this.navigator.navigate(desktopPage, item.url),
-        this.navigator.navigate(mobilePage, item.url),
-      ]);
-
-      // Reject error / captcha / parked pages
-      if (desktopNav.isErrorPage) {
-        const code = desktopNav.statusCode;
-        const reason: FailureReason = code === 404 ? 'http_error' : code === 0 ? 'network_error' : 'http_error';
+      if (nav.isErrorPage) {
+        const code = nav.nav.statusCode;
+        const reason: FailureReason =
+          code === 404 ? 'http_error' : code === 0 ? 'network_error' : 'http_error';
         throw Object.assign(new Error(`Error page: HTTP ${code}`), { reason });
       }
-      if (desktopNav.isCaptcha) {
+      if (nav.nav.isCaptcha) {
         throw Object.assign(new Error('CAPTCHA detected'), { reason: 'captcha' });
       }
-      if (desktopNav.isParkedDomain) {
+      if (nav.nav.isParkedDomain) {
         throw Object.assign(new Error('Parked domain'), { reason: 'blank_page' });
       }
 
-      // Detect brand and page type
-      const brand = this.brandDetector.detect(item.url, desktopNav, item.label);
-      const pageType = identifyPageType(desktopNav.finalUrl, desktopNav.pageTitle) as PageType;
+      // ── 2. Brand detection ────────────────────────────────────────────────
+      const brand = this.brandDetector.detect(item.url, nav.nav, item.label);
+      const pageType = identifyPageType(nav.nav.finalUrl, nav.nav.pageTitle) as PageType;
 
-      // Build screenshot directory
-      const screenshotDir = this.fileStorage.buildScreenshotPath(
-        this.config.outputDir,
-        item.label,
-        brand.normalizedName,
-        pageType,
-        urlHash,
+      const visitedFinalUrls = new Set<string>([nav.nav.finalUrl]);
+      const capturedHashes: string[] = [];
+      const allMetas: ReturnType<MetadataGenerator['generate']>[] = [];
+
+      // ── 3. Capture homepage ───────────────────────────────────────────────
+      const homepagePath = this.fileStorage.buildScreenshotFilePath(
+        this.config.outputDir, item.label, brand.normalizedName, 'homepage',
       );
 
-      // Capture screenshots
-      const rawScreenshots = await this.capture.captureAll(desktopPage, mobilePage, screenshotDir);
-
-      // Quality check
-      const validScreenshots = await this.qualityChecker.validateAll(rawScreenshots);
-
-      if (validScreenshots.length === 0) {
-        throw Object.assign(new Error('All screenshots failed quality check'), {
-          reason: 'image_quality',
-        });
+      if (!fs.existsSync(homepagePath)) {
+        const raw = await this.capture.captureDesktop(nav.page, homepagePath);
+        if (raw) {
+          const validated = await this.qualityChecker.validate(raw);
+          if (!validated || validated.isBlank) {
+            if (fs.existsSync(homepagePath)) fs.unlinkSync(homepagePath);
+            throw Object.assign(
+              new Error('Homepage quality check failed'),
+              { reason: 'image_quality' },
+            );
+          }
+          capturedHashes.push(validated.hash);
+          allMetas.push(this.metaGenerator.generate({
+            item, navResult: nav.nav, brand, pageType, screenshot: validated,
+            outputDir: this.config.outputDir,
+          }));
+        }
       }
 
-      // Generate and store metadata for each screenshot
-      const metadataEntries = validScreenshots.map((ss) => {
-        const input: GenerateInput = {
-          item,
-          navResult: desktopNav,
-          brand,
-          pageType,
-          screenshot: ss,
-          outputDir: this.config.outputDir,
-        };
-        return this.metaGenerator.generate(input);
-      });
-      this.metaStore.addBatch(metadataEntries);
+      // ── 4. Discover secondary pages (while homepage is still loaded) ───────
+      const discoveredPages = await this.discovery.discoverPages(
+        nav.page, item.url, visitedFinalUrls,
+      );
 
-      // Discover sub-pages only for legitimate sites (phishing usually one-pagers)
-      if (item.label === 0) {
-        const discoveredPages = await this.discovery.discoverPages(desktopPage, item.url);
-        await this.captureDiscoveredPages(
-          item,
-          workerIndex,
-          discoveredPages,
-          brand,
+      // Close homepage page NOW — frees ~30 MB renderer memory before sub-pages
+      await nav.page.close().catch(() => {});
+
+      // ── 5. Capture sub-pages (new Page per sub-page, same Context) ─────────
+      for (const discovered of discoveredPages) {
+        const subPath = this.fileStorage.buildScreenshotFilePath(
+          this.config.outputDir, item.label, brand.normalizedName, discovered.pageType,
         );
+
+        // File guard: page type already captured for this brand (resume-safe)
+        if (fs.existsSync(subPath)) continue;
+
+        // Open a new Page in the SAME context (no new browser process spawned)
+        const subPage = await ctx.newPage().catch(() => null as Page | null);
+        if (!subPage) continue;
+
+        try {
+          if (this.config.antiDetection) await applyStealthToPage(subPage);
+
+          const subNav = await this.navigator.navigate(subPage, discovered.url);
+
+          // Skip broken / bot-protected / parked sub-pages (non-fatal)
+          if (subNav.isErrorPage || subNav.isCaptcha || subNav.isParkedDomain) continue;
+
+          // URL guard: redirect landed on a page we already captured
+          if (visitedFinalUrls.has(subNav.finalUrl)) continue;
+          visitedFinalUrls.add(subNav.finalUrl);
+
+          const raw = await this.capture.captureDesktop(subPage, subPath);
+          if (!raw) continue;
+
+          const validated = await this.qualityChecker.validate(raw);
+          if (!validated || validated.isBlank) {
+            if (fs.existsSync(subPath)) fs.unlinkSync(subPath);
+            continue;
+          }
+
+          // Hash guard: visually identical to a page already captured this session
+          if (capturedHashes.some((h) => hammingDistance(h, validated.hash) <= HASH_DISTANCE_THRESHOLD)) {
+            fs.unlinkSync(subPath);
+            continue;
+          }
+          capturedHashes.push(validated.hash);
+
+          allMetas.push(this.metaGenerator.generate({
+            item: { ...item, url: discovered.url, attemptNumber: 0 },
+            navResult: subNav,
+            brand,
+            pageType: discovered.pageType,
+            screenshot: validated,
+            outputDir: this.config.outputDir,
+          }));
+        } catch {
+          // Sub-page failures are intentionally non-fatal
+          if (fs.existsSync(subPath)) {
+            try { fs.unlinkSync(subPath); } catch { /* ignore */ }
+          }
+        } finally {
+          // Close Page immediately — gives back renderer memory before next page
+          await subPage.close().catch(() => {});
+        }
       }
 
-      return {
-        success: true,
-        url: item.url,
-        screenshots: metadataEntries,
-        durationMs: 0,
-      };
+      this.metaStore.addBatch(allMetas);
+      return { success: true, url: item.url, screenshots: allMetas, durationMs: 0 };
+
     } finally {
-      await desktopCtx?.close().catch(() => {});
-      await mobileCtx?.close().catch(() => {});
+      // Closing the context releases all pages, cookies, JS heap, and cache
+      await ctx?.close().catch(() => {});
     }
   }
 
-  private async captureDiscoveredPages(
-    item: QueueItem,
-    workerIndex: number,
-    pages: DiscoveredPage[],
-    brand: ReturnType<BrandDetector['detect']>,
-  ): Promise<void> {
-    for (const discovered of pages.slice(0, 3)) {
-      let ctx: BrowserContext | null = null;
-      try {
-        ctx = await this.browserPool.createContext(workerIndex, false);
-        const page = await ctx.newPage();
-        if (this.config.antiDetection) await applyStealthToPage(page);
+  // ── Helper: open a page, apply stealth, navigate ──────────────────────────
 
-        const nav = await this.navigator.navigate(page, discovered.url);
-        if (nav.isErrorPage || nav.isCaptcha) continue;
-
-        const pageHash = shortHash(discovered.url);
-        const screenshotDir = this.fileStorage.buildScreenshotPath(
-          this.config.outputDir,
-          item.label,
-          brand.normalizedName,
-          discovered.pageType,
-          pageHash,
-        );
-
-        // Only desktop page for discovered sub-pages
-        const dummyMobilePage = page; // reuse same page (only desktop types captured)
-        const captureTypes = this.config.screenshotTypes.filter(
-          (t) => t === 'desktop' || t === 'fullpage' || t === 'above_fold',
-        );
-        const captureTool = new ScreenshotCapture({
-          outputDir: this.config.outputDir,
-          types: captureTypes,
-          timeoutMs: this.config.screenshotTimeoutMs,
-        });
-
-        const raws = await captureTool.captureAll(page, dummyMobilePage, screenshotDir);
-        const valid = await this.qualityChecker.validateAll(raws);
-
-        const subItem: QueueItem = {
-          ...item,
-          url: discovered.url,
-          attemptNumber: 0,
-        };
-
-        const metas = valid.map((ss) =>
-          this.metaGenerator.generate({
-            item: subItem,
-            navResult: nav,
-            brand,
-            pageType: discovered.pageType,
-            screenshot: ss,
-            outputDir: this.config.outputDir,
-          }),
-        );
-        this.metaStore.addBatch(metas);
-      } catch {
-        // Sub-page failures are non-fatal
-      } finally {
-        await ctx?.close().catch(() => {});
-      }
-    }
+  private async navigateFresh(
+    ctx: BrowserContext,
+    url: string,
+  ): Promise<{ page: Page; nav: Awaited<ReturnType<PageNavigator['navigate']>>; isErrorPage: boolean }> {
+    const page = await ctx.newPage();
+    if (this.config.antiDetection) await applyStealthToPage(page);
+    const nav = await this.navigator.navigate(page, url);
+    return { page, nav, isErrorPage: nav.isErrorPage };
   }
 }

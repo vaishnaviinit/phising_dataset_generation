@@ -1,3 +1,20 @@
+// ─────────────────────────────────────────────────────────────────────────────
+//  File storage helpers
+//
+//  New folder layout (one screenshot per page type, no hash subdirectory):
+//
+//    dataset/
+//      legitimate/
+//        amazon/
+//          homepage.png
+//          login.png
+//          signup.png
+//      phishing/
+//        paypal/
+//          homepage.png
+//          login.png
+// ─────────────────────────────────────────────────────────────────────────────
+
 import * as fs from 'fs';
 import * as path from 'path';
 import { FailedUrlEntry } from '../types';
@@ -33,13 +50,13 @@ export class FileStorage {
       const writer = createObjectCsvWriter({
         path: filePath,
         header: [
-          { id: 'url', title: 'url' },
-          { id: 'label', title: 'label' },
-          { id: 'reason', title: 'reason' },
-          { id: 'statusCode', title: 'status_code' },
+          { id: 'url',          title: 'url' },
+          { id: 'label',        title: 'label' },
+          { id: 'reason',       title: 'reason' },
+          { id: 'statusCode',   title: 'status_code' },
           { id: 'errorMessage', title: 'error_message' },
-          { id: 'timestamp', title: 'timestamp' },
-          { id: 'attempt', title: 'attempt' },
+          { id: 'timestamp',    title: 'timestamp' },
+          { id: 'attempt',      title: 'attempt' },
         ],
         append: false,
       });
@@ -49,27 +66,41 @@ export class FileStorage {
     }
   }
 
+  /** Create top-level label directories. */
   ensureOutputDirs(baseDir: string): void {
-    const dirs = [
-      path.join(baseDir, 'legitimate'),
-      path.join(baseDir, 'phishing'),
-    ];
-    for (const dir of dirs) {
-      ensureDir(dir);
-    }
+    ensureDir(path.join(baseDir, 'legitimate'));
+    ensureDir(path.join(baseDir, 'phishing'));
   }
 
-  buildScreenshotPath(
+  /**
+   * Return (and create) the brand directory for a given label + normalised brand name.
+   * Path: `{outputDir}/legitimate|phishing/{brandNormalized}/`
+   */
+  buildBrandDir(
+    outputDir: string,
+    label: 0 | 1,
+    brandNormalized: string,
+  ): string {
+    const category = label === 0 ? 'legitimate' : 'phishing';
+    const dir = path.join(outputDir, category, brandNormalized);
+    ensureDir(dir);
+    return dir;
+  }
+
+  /**
+   * Return the full file path for a single page-type screenshot.
+   * Path: `{outputDir}/legitimate|phishing/{brand}/{pageType}.png`
+   *
+   * The directory is created automatically; the file itself is NOT created.
+   */
+  buildScreenshotFilePath(
     outputDir: string,
     label: 0 | 1,
     brandNormalized: string,
     pageType: string,
-    urlHash: string,
   ): string {
-    const category = label === 0 ? 'legitimate' : 'phishing';
-    const dir = path.join(outputDir, category, brandNormalized, pageType, urlHash);
-    ensureDir(dir);
-    return dir;
+    const dir = this.buildBrandDir(outputDir, label, brandNormalized);
+    return path.join(dir, `${pageType}.png`);
   }
 
   getFailedCount(): number {

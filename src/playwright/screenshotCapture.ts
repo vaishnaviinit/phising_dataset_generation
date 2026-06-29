@@ -1,107 +1,65 @@
-import * as path from 'path';
+// ─────────────────────────────────────────────────────────────────────────────
+//  Screenshot capture — desktop-only, one file per page type
+//
+//  The new strategy captures exactly ONE desktop screenshot per page.
+//  The caller is responsible for building the output file path (e.g.
+//  `dataset/legitimate/amazon/login.png`).  No mobile / fullpage / above-fold
+//  variants are created by default.
+// ─────────────────────────────────────────────────────────────────────────────
+
 import * as fs from 'fs';
+import * as path from 'path';
 import { Page } from 'playwright';
 import { ScreenshotType } from '../types';
 import { ensureDir } from '../utils/helpers';
 import { logger } from '../logger';
 
-export interface CaptureOptions {
-  outputDir: string;
-  types: ScreenshotType[];
-  timeoutMs: number;
-}
-
+/** Minimal raw screenshot record passed to the quality checker. */
 export interface RawScreenshot {
+  /** In the new strategy this is always 'desktop'; the type is kept broad for
+   *  backward compatibility with the validate script and quality checker. */
   type: ScreenshotType;
   path: string;
 }
 
 export class ScreenshotCapture {
-  private options: CaptureOptions;
+  private timeoutMs: number;
 
-  constructor(options: CaptureOptions) {
-    this.options = options;
+  constructor(timeoutMs: number) {
+    this.timeoutMs = timeoutMs;
   }
 
-  async captureAll(
-    desktopPage: Page,
-    mobilePage: Page,
-    screenshotDir: string,
-  ): Promise<RawScreenshot[]> {
-    const results: RawScreenshot[] = [];
-    const { types } = this.options;
-
-    ensureDir(screenshotDir);
-
-    for (const type of types) {
-      try {
-        const result = await this.captureOne(desktopPage, mobilePage, type, screenshotDir);
-        if (result) results.push(result);
-      } catch (err) {
-        logger.debug(`Screenshot ${type} failed: ${err instanceof Error ? err.message : err}`);
-      }
-    }
-
-    return results;
-  }
-
-  private async captureOne(
-    desktopPage: Page,
-    mobilePage: Page,
-    type: ScreenshotType,
-    screenshotDir: string,
-  ): Promise<RawScreenshot | null> {
-    const outPath = path.join(screenshotDir, `${type}.png`);
+  /**
+   * Capture a full-viewport desktop screenshot and save it to `filePath`.
+   * Returns null if the capture failed or the resulting file is too small.
+   */
+  async captureDesktop(page: Page, filePath: string): Promise<RawScreenshot | null> {
+    ensureDir(path.dirname(filePath));
 
     try {
-      switch (type) {
-        case 'desktop':
-          await desktopPage.screenshot({
-            path: outPath,
-            type: 'png',
-            timeout: this.options.timeoutMs,
-          });
-          break;
+      await page.screenshot({
+        path: filePath,
+        type: 'png',
+        timeout: this.timeoutMs,
+      });
 
-        case 'mobile':
-          await mobilePage.screenshot({
-            path: outPath,
-            type: 'png',
-            timeout: this.options.timeoutMs,
-          });
-          break;
+      if (!fs.existsSync(filePath)) return null;
 
-        case 'fullpage':
-          await desktopPage.screenshot({
-            path: outPath,
-            type: 'png',
-            fullPage: true,
-            timeout: this.options.timeoutMs,
-          });
-          break;
-
-        case 'above_fold': {
-          // Capture only the viewport area (above the fold)
-          const vp = desktopPage.viewportSize() ?? { width: 1920, height: 1080 };
-          await desktopPage.screenshot({
-            path: outPath,
-            type: 'png',
-            clip: { x: 0, y: 0, width: vp.width, height: vp.height },
-            timeout: this.options.timeoutMs,
-          });
-          break;
-        }
-      }
-
-      if (!fs.existsSync(outPath)) return null;
-      const stat = fs.statSync(outPath);
-      if (stat.size < 500) {
-        fs.unlinkSync(outPath);
+      const { size } = fs.statSync(filePath);
+      if (size < 500) {
+        fs.unlinkSync(filePath);
         return null;
       }
 
-      return { type, path: outPath };
-    } catch {
+      return { type: 'desktop' as ScreenshotType, path: filePath };
+    } catch (err) {
+      logger.debug(
+        `Screenshot capture failed (${filePath}): ${err instanceof Error ? err.message : err}`,
+      );
+      // Clean up partial file if it was written
+      if (fs.existsSync(filePath)) {
+        try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+      }
       return null;
     }
   }

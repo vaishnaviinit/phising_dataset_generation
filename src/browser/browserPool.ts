@@ -71,13 +71,17 @@ export class BrowserPool {
 
     const context = await browser.newContext(ctxOptions);
 
-    // Block unnecessary resource types to speed up loading
+    // Block resource types that waste bandwidth and memory without affecting
+    // the visual layout captured in screenshots.
     await context.route('**/*', (route) => {
-      const blocked = ['font', 'media'];
-      if (blocked.includes(route.request().resourceType())) {
-        route.abort();
+      const resourceType = route.request().resourceType();
+      // font  → not needed for screenshots (browser falls back to system fonts)
+      // media → audio/video elements; not rendered in screenshots
+      const blocked = new Set(['font', 'media']);
+      if (blocked.has(resourceType)) {
+        route.abort().catch(() => {});
       } else {
-        route.continue();
+        route.continue().catch(() => {});
       }
     });
 
